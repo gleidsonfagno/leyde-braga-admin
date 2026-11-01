@@ -141,6 +141,8 @@ Na Vercel, o IP é obtido do cabeçalho confiável `x-vercel-forwarded-for` apen
 
 ## Produtos, marcas e categorias
 
+Os cadastros feitos no painel ou na API administrativa são gravados no PostgreSQL de produção e permanecem após novas publicações. Commits versionam o código e a documentação, não os registros do catálogo; planilhas, credenciais e relatórios com custos ficam fora do Git. Um novo item não deve reutilizar o cadastro de outro já vendido: preserve o registro anterior inativo e crie o novo com código e slug únicos. As alterações administrativas invalidam o cache público automaticamente.
+
 Todas as rotas administrativas exigem sessão válida. Para cada recurso `products`, `brands` e `categories`, as rotas seguem este padrão:
 
 | Método | Rota | Operação |
