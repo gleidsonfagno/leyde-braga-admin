@@ -252,6 +252,33 @@ test('API integrada com PostgreSQL dedicado', {
     assert.equal((await data<Product>(await admin(`products/${inactiveProduct.id}`))).active, false);
   });
 
+  await t.test('cache público invalida preço, imagens e desativação sem armazenar dados administrativos', async () => {
+    const originalPrice = (await data<Product>(await admin(`products/${product.id}`))).price;
+    const query = `products?q=${encodeURIComponent(product.code)}`;
+    await storefront(query);
+    const hit = await storefront(query);
+    assert.equal(hit.headers.get('X-Catalog-Cache'), 'HIT');
+    assert.equal((await admin('products')).headers.get('X-Catalog-Cache'), null);
+    await json(await admin(`products/${product.id}`, { method: 'PATCH', input: { price: '178.90' } }));
+    const refreshed = await storefront(query);
+    assert.equal(refreshed.headers.get('X-Catalog-Cache'), 'MISS');
+    const products = await data<Product[]>(refreshed);
+    assert.equal(products.find((p) => p.id === product.id)?.price, '178.90');
+    assert.equal('cost' in products[0], false);
+    const detailPath = `products/${product.slug}`;
+    await storefront(detailPath);
+    const image = await data<Image>(await admin(`products/${product.id}/images`, { method: 'POST', input: { url: 'https://example.com/cache-test.jpg', alt: 'Teste de invalidação', order: 0 } }), 201);
+    const withImage = await storefront(detailPath);
+    assert.equal(withImage.headers.get('X-Catalog-Cache'), 'MISS');
+    assert.ok((await data<Product>(withImage)).images.some((entry) => entry.id === image.id));
+    await json(await admin(`products/${product.id}/images/${image.id}`, { method: 'DELETE' }));
+    await json(await admin(`products/${product.id}`, { method: 'DELETE' }));
+    assert.equal((await storefront(detailPath)).status, 404);
+    assert.equal((await storefront(detailPath)).headers.get('X-Catalog-Cache'), null);
+    assert.equal((await storefront('products?pageSize=101')).headers.get('X-Catalog-Cache'), null);
+    await json(await admin(`products/${product.id}`, { method: 'PATCH', input: { active: true, price: originalPrice } }));
+  });
+
   await t.test('produtos administrativos: filtros active, brand e category combinados', async () => {
     for (const [filter, expected] of [
       ['', allProducts],

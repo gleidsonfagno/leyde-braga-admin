@@ -3,6 +3,7 @@ import { authenticate, consumeLoginAttempt, createSession, readSessionToken, ses
 import { ApiError, body, endpoint, json, requireSameOrigin } from './http';
 import { adminPaginationSchema, idSchema, imageSchema, loginSchema, nonEmptyPatch, paginationSchema, productSchema, slugSchema, taxonomySchema } from './validation';
 import { productFilter, publicProductSelect, publicTaxonomySelect, publicVisibility, serializeProduct } from './catalog';
+import { publicCatalogCache } from './public-cache';
 
 const missing = () => { throw new ApiError(404, 'NOT_FOUND', 'Registro não encontrado.'); };
 const methodDenied = () => { throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Método não permitido.'); };
@@ -16,25 +17,30 @@ export const publicApi = endpoint(async (request) => {
   if (parts.length === 1 && parts[0] === 'health') return json({ status: 'ok' });
   if (parts.length === 1 && parts[0] === 'products') {
     const query = paginationSchema.parse(Object.fromEntries(url.searchParams));
-    const where = productFilter(query, true);
-    const [products, total] = await Promise.all([
-      db.product.findMany({ where, select: publicProductSelect, skip: (query.page - 1) * query.pageSize, take: query.pageSize, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }),
-      db.product.count({ where }),
-    ]);
-    return json({ data: products.map(serializeProduct), pagination: { page: query.page, pageSize: query.pageSize, total } });
+    return publicCatalogCache.response(`products:${JSON.stringify(query)}`, async () => {
+      const where = productFilter(query, true);
+      const [products, total] = await Promise.all([
+        db.product.findMany({ where, select: publicProductSelect, skip: (query.page - 1) * query.pageSize, take: query.pageSize, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }),
+        db.product.count({ where }),
+      ]);
+      return { data: products.map(serializeProduct), pagination: { page: query.page, pageSize: query.pageSize, total } };
+    });
   }
   if (parts.length === 2 && parts[0] === 'products') {
-    const product = await db.product.findFirst({ where: { ...publicVisibility, slug: slugSchema.parse(parts[1]) }, select: publicProductSelect });
-    return product ? json({ data: serializeProduct(product) }) : missing();
+    const slug = slugSchema.parse(parts[1]);
+    return publicCatalogCache.response(`product:${slug}`, async () => {
+      const product = await db.product.findFirst({ where: { ...publicVisibility, slug }, select: publicProductSelect });
+      return product ? { data: serializeProduct(product) } : missing();
+    });
   }
   if (parts.length === 1 && (parts[0] === 'brands' || parts[0] === 'categories')) {
     const args = { where: { active: true }, select: publicTaxonomySelect, orderBy: { name: 'asc' as const } };
-    return json({ data: parts[0] === 'brands' ? await db.brand.findMany(args) : await db.category.findMany(args) });
+    return publicCatalogCache.response(parts[0], async () => ({ data: parts[0] === 'brands' ? await db.brand.findMany(args) : await db.category.findMany(args) }));
   }
   return missing();
 }, true);
 
-export const adminApi = endpoint(async (request) => {
+const adminHandler = async (request: Request): Promise<Response> => {
   const url = new URL(request.url);
   const parts = url.pathname.split('/').filter(Boolean).slice(3).map(decodeURIComponent);
   const method = request.method;
@@ -116,4 +122,13 @@ export const adminApi = endpoint(async (request) => {
     return json({ data: resource === 'brands' ? await db.brand.update({ where: { id }, data }) : await db.category.update({ where: { id }, data }) });
   }
   return methodDenied();
+};
+
+export const adminApi = endpoint(async (request) => {
+  const response = await adminHandler(request);
+  if (response.ok && ['POST', 'PATCH', 'DELETE'].includes(request.method)
+    && /^\/api\/v1\/admin\/(products|brands|categories)(?:\/|$)/.test(new URL(request.url).pathname)) {
+    await publicCatalogCache.invalidate();
+  }
+  return response;
 });

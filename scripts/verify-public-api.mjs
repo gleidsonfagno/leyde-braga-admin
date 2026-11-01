@@ -10,6 +10,12 @@ assert.equal(list.status, 200);
 assert.equal(list.headers.get('access-control-allow-origin'), storefront);
 assert.equal(list.headers.get('access-control-allow-credentials'), null);
 const catalog = await list.json();
+assert.ok(['HIT', 'MISS'].includes(list.headers.get('x-catalog-cache')));
+assert.equal(list.headers.get('cache-control'), 'no-store');
+const repeated = await fetch(`${base}/api/v1/products?pageSize=100`, { headers: { Origin: storefront } });
+assert.equal(repeated.status, 200);
+assert.equal(repeated.headers.get('x-catalog-cache'), 'HIT');
+assert.deepEqual(await repeated.json(), catalog);
 assert.ok(catalog.pagination.total > 0);
 assert.ok(catalog.data.length > 0);
 const serialized = JSON.stringify(catalog);
@@ -38,6 +44,7 @@ for (const resource of ['brands', 'categories']) {
 }
 const admin = await fetch(`${base}/api/v1/admin/products`);
 assert.equal(admin.status, 401);
+assert.equal(admin.headers.get('x-catalog-cache'), null);
 const sourceFile = await fetch(`${base}/catalog/import-ready.json`);
 assert.equal(sourceFile.status, 404);
 const protectedPage = await fetch(`${base}/produtos`, { redirect: 'manual' });

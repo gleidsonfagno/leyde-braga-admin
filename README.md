@@ -46,6 +46,8 @@ Para verificar os links de imagens do lote, execute `node scripts/check-catalog-
 
 ## Conexão da vitrine
 
+O roteiro completo para a IA da vitrine está em [`docs/INTEGRAR-VITRINE.md`](docs/INTEGRAR-VITRINE.md), incluindo paginação, filtros, preços em reais, imagens ausentes e limites da API de catálogo.
+
 A base pública de produção é `https://leyde-braga-admin.vercel.app/api/v1`. A vitrine deve consumir `GET /products`, `GET /products/:slug`, `GET /brands` e `GET /categories`, sem cookies administrativos. Cadastre o domínio exato da vitrine em `CORS_ORIGINS`. Os preços retornam como strings decimais. O custo e demais campos privados permanecem disponíveis somente após autenticação administrativa. Não compartilhe `AUTH_SECRET` ou credenciais do banco com o front-end.
 
 Execute `node scripts/verify-public-api.mjs` para conferir catálogo, busca, filtros, imagens, preços, CORS e bloqueio de dados administrativos no endereço público. `API_BASE_URL` e `STOREFRONT_ORIGIN` permitem verificar outro ambiente.
@@ -112,6 +114,14 @@ Todas as rotas abaixo usam o prefixo `/api/v1` e não exigem sessão administrat
 Na listagem de produtos, os filtros `q`, `brand` e `category` são opcionais. A paginação começa em `page=1`, com `pageSize=20` por padrão e limite de 100 itens por página. Listagem e detalhe só expõem produtos ativos cuja marca e categoria também estejam ativas.
 
 O campo `code` do produto é público. O custo (`cost`) é privado. As respostas públicas também excluem `stock`, `active` e timestamps internos, como `createdAt` e `updatedAt`. Valores monetários são strings com exatamente duas casas decimais, como `"129.90"`; envie esse mesmo formato nos campos administrativos `cost` e `price`.
+
+## Cache do catálogo público
+
+Listagens de produtos, detalhes, marcas e categorias usam Vercel Runtime Cache por 60 segundos, com namespace próprio do projeto e chaves derivadas dos parâmetros validados. Em desenvolvimento, o SDK utiliza cache em memória. `X-Catalog-Cache: HIT` ou `MISS` informa se a consulta reutilizou dados; `Cache-Control: no-store` impede que navegador ou proxy conservem uma cópia independente.
+
+Alterações autenticadas de produtos, marcas, categorias e imagens invalidam a tag do catálogo após a gravação. A invalidação distribuída pode levar alguns instantes para propagar. Se o cache estiver indisponível, a API consulta o banco normalmente; se a invalidação falhar, as entradas expiram em até 60 segundos. Login, logout, sessões, rotas administrativas e respostas de erro nunca são armazenados nesse cache. O cache não contém custos nem estoque.
+
+Para uma ativação inicial revisada, `npx tsx scripts/prepare-production.ts` lê `catalog/production-setup.json` (ou `PRODUCTION_SETUP_FILE`) com códigos/slugs existentes e email/hash scrypt do administrador. O script exige correspondência exata dos produtos, ativa seus registros e taxonomias em uma transação e cria o administrador somente se não existir. Não altera preços, custos, quantidades ou senhas existentes. O lote e as credenciais locais ficam ignorados no Git; nunca inclua senha em texto puro na publicação. Esse comando é excepcional e não integra o build normal.
 
 ## Autenticação administrativa
 
