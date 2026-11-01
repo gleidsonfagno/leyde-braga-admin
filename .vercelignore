@@ -1,0 +1,11 @@
+.git/
+node_modules/
+.next/
+.env*
+!.env.example
+*.tsbuildinfo
+*.log
+coverage/
+catalog/*
+!catalog/import-ready.json
+!catalog/vercel-import.json

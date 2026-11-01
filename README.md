@@ -23,6 +23,33 @@ No Linux/macOS, use `cp .env.example .env`. Preencha o `.env` antes de acessar o
 
 O `prisma.config.ts` carrega o `.env` com `dotenv/config` e configura `datasource.url` com `DIRECT_URL` para a CLI. No runtime, `src/lib/db.ts` utiliza `DATABASE_URL` com `PrismaPg`; o pool do adapter está configurado com `max: 1`, `idleTimeoutMillis: 10000` (10 segundos) e `connectionTimeoutMillis: 10000` (10 segundos).
 
+Integrações que provisionam nomes alternativos também são suportadas: no runtime, a aplicação procura uma conexão TCP PostgreSQL válida em `DATABASE_URL_POOLED`, `DATABASE_URL` e `POSTGRES_URL`, nessa ordem. Para migrations, prefere `DIRECT_URL`, depois `POSTGRES_URL`, `DATABASE_URL` e `DATABASE_URL_POOLED`. URLs `prisma+postgres://` de Accelerate não são repassadas ao driver `pg`. Configure uma conexão direta explícita quando o pool do provedor não aceitar migrations.
+
+As transações aguardam até 15 segundos pela conexão e têm limite de execução de 15 segundos. Isso permite estabelecer a primeira conexão em uma instância serverless sem esgotar a espera padrão de 2 segundos do Prisma. Falhas inesperadas registram apenas caminho e códigos técnicos no servidor; a resposta pública permanece genérica.
+
+## Importação do estoque real
+
+O cadastro inicial pode ser importado por um script executado no servidor, sem criar uma rota pública de importação nem administrador com senha padrão:
+
+```sh
+npm run catalog:prepare
+npm run catalog:plan
+npm run db:deploy
+npm run catalog:apply
+```
+
+`catalog:prepare` combina `catalog/stock-source.json` com os três arquivos de pesquisa `research-*.json`, exige cobertura de todas as linhas e preserva custo, preço e estoque atual. A preparação gera `catalog/import-ready.json` e `catalog/conferencia.md`. As fontes e arquivos reais de estoque ficam ignorados pelo Git; não os coloque em `public/`. O lote não é fictício nem faz parte do build comum.
+
+`catalog:plan` valida o lote sem consultar nem alterar registros. `catalog:apply` insere o lote em uma transação: identifica registros por código e slug, pula os já existentes e aborta em conflitos. Não sobrescreve edições nem repõe o estoque ao reexecutar. `CATALOG_IMPORT_FILE` permite selecionar outro arquivo de lote com o mesmo formato. Identificações ou imagens pendentes ficam inativas; os motivos estão no relatório de conferência. Códigos `LB-EST-*` são identificadores internos para linhas sem código único, e não referências oficiais do fabricante.
+
+Para verificar os links de imagens do lote, execute `node scripts/check-catalog-images.mjs`; o resultado fica em `catalog/image-check.json`. O arquivo `.vercelignore` exclui fontes e relatórios privados e permite somente o lote necessário à importação e sua configuração temporária. A configuração opcional local `catalog/vercel-import.json` aplica migrations e importa o lote antes de compilar; utilize-a apenas na importação inicial, com o projeto e ambiente de produção confirmados. Publicações seguintes usam o build normal e mantêm os produtos já cadastrados no PostgreSQL.
+
+## Conexão da vitrine
+
+A base pública de produção é `https://leyde-braga-admin.vercel.app/api/v1`. A vitrine deve consumir `GET /products`, `GET /products/:slug`, `GET /brands` e `GET /categories`, sem cookies administrativos. Cadastre o domínio exato da vitrine em `CORS_ORIGINS`. Os preços retornam como strings decimais. O custo e demais campos privados permanecem disponíveis somente após autenticação administrativa. Não compartilhe `AUTH_SECRET` ou credenciais do banco com o front-end.
+
+Execute `node scripts/verify-public-api.mjs` para conferir catálogo, busca, filtros, imagens, preços, CORS e bloqueio de dados administrativos no endereço público. `API_BASE_URL` e `STOREFRONT_ORIGIN` permitem verificar outro ambiente.
+
 Para gerar um `AUTH_SECRET` de 64 caracteres hexadecimais:
 
 ```sh

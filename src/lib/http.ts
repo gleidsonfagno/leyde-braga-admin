@@ -51,7 +51,18 @@ export function endpoint(handler: (request: Request) => Promise<Response>, isPub
       else if (error instanceof ApiError) response = json({ error: { code: error.code, message: error.message } }, error.status);
       else if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') response = json({ error: { code: 'CONFLICT', message: 'Código ou slug já cadastrado.' } }, 409);
       else if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2025', 'P2003'].includes(error.code)) response = json({ error: { code: 'INVALID_REFERENCE', message: 'Registro ou referência não encontrado.' } }, 404);
-      else response = json({ error: { code: 'INTERNAL_ERROR', message: 'Não foi possível concluir a operação.' } }, 500);
+      else {
+        const failure = error as { name?: unknown; code?: unknown; meta?: { driverAdapterError?: { name?: unknown; cause?: { kind?: unknown; code?: unknown } } } } | null;
+        console.error('API request failed', {
+          path: new URL(request.url).pathname,
+          name: typeof failure?.name === 'string' ? failure.name : 'UnknownError',
+          code: typeof failure?.code === 'string' ? failure.code : undefined,
+          adapter: failure?.meta?.driverAdapterError?.name,
+          cause: failure?.meta?.driverAdapterError?.cause?.kind,
+          databaseCode: failure?.meta?.driverAdapterError?.cause?.code,
+        });
+        response = json({ error: { code: 'INTERNAL_ERROR', message: 'Não foi possível concluir a operação.' } }, 500);
+      }
     }
     return isPublic ? publicCors(request, response) : response;
   };

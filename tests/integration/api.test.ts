@@ -31,6 +31,8 @@ test('API integrada com PostgreSQL dedicado', {
 }, async (t) => {
   assert.ok(testDatabaseUrl);
   process.env.DATABASE_URL = testDatabaseUrl;
+  process.env.DATABASE_URL_POOLED = testDatabaseUrl;
+  process.env.POSTGRES_URL = testDatabaseUrl;
   process.env.DIRECT_URL = process.env.TEST_DIRECT_URL || testDatabaseUrl;
   process.env.APP_ORIGIN = origin;
   process.env.AUTH_SECRET ||= 'integration-only-secret-at-least-32-characters-long';
