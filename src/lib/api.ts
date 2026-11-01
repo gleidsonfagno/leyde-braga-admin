@@ -17,7 +17,7 @@ export const publicApi = endpoint(async (request) => {
   if (parts.length === 1 && parts[0] === 'products') {
     const query = paginationSchema.parse(Object.fromEntries(url.searchParams));
     const where = productFilter(query, true);
-    const [products, total] = await db.$transaction([
+    const [products, total] = await Promise.all([
       db.product.findMany({ where, select: publicProductSelect, skip: (query.page - 1) * query.pageSize, take: query.pageSize, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }),
       db.product.count({ where }),
     ]);
@@ -83,7 +83,7 @@ export const adminApi = endpoint(async (request) => {
     if (!id && method === 'GET') {
       const query = adminPaginationSchema.parse(Object.fromEntries(url.searchParams));
       const where = { ...productFilter(query, false), ...(query.active !== undefined ? { active: query.active === 'true' } : {}) };
-      const [products, total] = await db.$transaction([
+      const [products, total] = await Promise.all([
         db.product.findMany({ where, include: { brand: true, category: true, images: { orderBy: [{ order: 'asc' }, { id: 'asc' }] } }, skip: (query.page - 1) * query.pageSize, take: query.pageSize, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }), db.product.count({ where }),
       ]);
       return json({ data: products.map(serializeProduct), pagination: { page: query.page, pageSize: query.pageSize, total } });
@@ -100,7 +100,7 @@ export const adminApi = endpoint(async (request) => {
   if (!id && method === 'GET') {
     const query = adminPaginationSchema.parse(Object.fromEntries(url.searchParams));
     const args = { where: { ...(query.active !== undefined ? { active: query.active === 'true' } : {}), ...(query.q ? { name: { contains: query.q, mode: 'insensitive' as const } } : {}) }, skip: (query.page - 1) * query.pageSize, take: query.pageSize, orderBy: [{ name: 'asc' as const }, { id: 'asc' as const }] };
-    const [data, total] = resource === 'brands' ? await db.$transaction([db.brand.findMany(args), db.brand.count({ where: args.where })]) : await db.$transaction([db.category.findMany(args), db.category.count({ where: args.where })]);
+    const [data, total] = resource === 'brands' ? await Promise.all([db.brand.findMany(args), db.brand.count({ where: args.where })]) : await Promise.all([db.category.findMany(args), db.category.count({ where: args.where })]);
     return json({ data, pagination: { page: query.page, pageSize: query.pageSize, total } });
   }
   if (id && method === 'GET') {

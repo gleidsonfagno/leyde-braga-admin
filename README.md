@@ -21,7 +21,7 @@ No Linux/macOS, use `cp .env.example .env`. Preencha o `.env` antes de acessar o
 | `CORS_ORIGINS` | Allowlist de origens exatas do catálogo público, separadas por vírgulas. Local, por exemplo: `http://localhost:3001`. |
 | `AUTH_SECRET` | Segredo aleatório com pelo menos 32 caracteres. Nunca versione seu valor nem o exponha ao cliente. |
 
-O `prisma.config.ts` carrega o `.env` com `dotenv/config` e configura `datasource.url` com `DIRECT_URL` para a CLI. No runtime, `src/lib/db.ts` utiliza `DATABASE_URL` com `PrismaPg`; o pool do adapter está configurado com `max: 1`, `idleTimeoutMillis: 10000` (10 segundos) e `connectionTimeoutMillis: 10000` (10 segundos).
+O `prisma.config.ts` carrega o `.env` com `dotenv/config` e configura `datasource.url` com `DIRECT_URL` para a CLI. No runtime, `src/lib/db.ts` utiliza `DATABASE_URL` com `PrismaPg`; o pool PostgreSQL é compartilhado com o adapter e está configurado com `max: 5`, `min: 0`, `idleTimeoutMillis: 5000` (5 segundos) e `connectionTimeoutMillis: 10000` (10 segundos). O helper `attachDatabasePool` de `@vercel/functions` gerencia conexões ociosas durante a suspensão das instâncias do Fluid Compute.
 
 Integrações que provisionam nomes alternativos também são suportadas: no runtime, a aplicação procura uma conexão TCP PostgreSQL válida em `DATABASE_URL_POOLED`, `DATABASE_URL` e `POSTGRES_URL`, nessa ordem. Para migrations, prefere `DIRECT_URL`, depois `POSTGRES_URL`, `DATABASE_URL` e `DATABASE_URL_POOLED`. URLs `prisma+postgres://` de Accelerate não são repassadas ao driver `pg`. Configure uma conexão direta explícita quando o pool do provedor não aceitar migrations.
 
@@ -168,7 +168,7 @@ As rotas `/api/*` mantêm a CSP restritiva `default-src 'none'; frame-ancestors 
 
 Configure `DATABASE_URL`, `DIRECT_URL`, `APP_ORIGIN`, `CORS_ORIGINS` e `AUTH_SECRET` nas variáveis do ambiente correspondente da Vercel. Use `DATABASE_URL` com pool para o runtime serverless e `DIRECT_URL` direta para a CLI e migrations via `prisma.config.ts`, ambas apontando para o mesmo banco. Exija TLS nas conexões de produção com `sslmode=verify-full`, validando certificado e hostname. Não exponha essas variáveis com prefixo `NEXT_PUBLIC_`.
 
-Use a URL com pool fornecida pelo provedor, como `postgresql://USER:PASSWORD@POOLED_HOST:5432/DATABASE?sslmode=verify-full`, conforme o `.env.example`. O limite de conexões e os timeouts são definidos nas opções do adapter em `src/lib/db.ts`: uma conexão por pool, 10 segundos de inatividade e 10 segundos para estabelecer a conexão. Use HTTPS para `APP_ORIGIN` e origens públicas de produção.
+Use a URL com pool fornecida pelo provedor, como `postgresql://USER:PASSWORD@POOLED_HOST:5432/DATABASE?sslmode=verify-full`, conforme o `.env.example`. O limite de conexões e os timeouts são definidos nas opções do adapter em `src/lib/db.ts`: até cinco conexões por pool, cinco segundos de inatividade e 10 segundos para estabelecer a conexão. As listagens usam consultas de leitura concorrentes em vez de transações para paginação; a contagem pode refletir uma alteração ocorrida entre as duas consultas. Use HTTPS para `APP_ORIGIN` e origens públicas de produção.
 
 No fluxo de implantação, execute as migrations versionadas com credenciais do ambiente de destino e depois o build:
 
