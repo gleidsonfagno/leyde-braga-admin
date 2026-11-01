@@ -1,6 +1,6 @@
-# Leyde Braga — API administrativa e catálogo
+# Leyde Braga — painel administrativo e API de catálogo
 
-API com Next.js 16, Prisma 7.10.1, `@prisma/adapter-pg` e PostgreSQL. Este projeto não inclui painel administrativo nem seeds. O cadastro de administradores é feito pelo terminal; produtos, marcas, categorias e imagens são gerenciados pela API.
+Painel administrativo e API com Next.js 16, Prisma 7.10.1, `@prisma/adapter-pg` e PostgreSQL. O cadastro de administradores é feito pelo terminal; produtos, marcas, categorias e imagens são gerenciados pelo painel, que consome a API administrativa. A vitrine pública está fora do escopo. O projeto não inclui seeds.
 
 ## Preparação local
 
@@ -48,6 +48,27 @@ npm run admin:create
 Execute na raiz, em um terminal interativo com entrada e saída TTY. O primeiro import do script é `dotenv/config`, que carrega o `.env`, quando presente, antes da inicialização do pool de banco. O script solicita email, senha oculta e confirmação. O email é normalizado para minúsculas e validado; a senha deve ter de 12 a 128 caracteres e é validada por `passwordSchema` e `loginSchema` antes do cadastro.
 
 Não passe senha por argumentos, variáveis de ambiente, pipes ou redirecionamento. O script não aceita argumentos, não lê senha do ambiente e não imprime senha nem hash. Use Backspace para corrigir a senha ou Ctrl+C para cancelar. A senha é processada por `hashPassword` de `src/lib/auth.ts`; o cadastro usa `db.admin.create`, sem `upsert`. Um email já cadastrado provoca falha, sem substituir suas credenciais. A conexão é encerrada em `finally`, inclusive em erros de validação ou de banco.
+
+## Painel administrativo
+
+Após iniciar a aplicação, acesse `/login` e entre com o administrador criado pelo terminal. A raiz `/` redireciona para `/produtos`.
+
+| Página | Função |
+| --- | --- |
+| `/login` | Autenticação por email e senha; uma sessão já válida redireciona para `/produtos`. |
+| `/produtos` | Listagem com busca textual, filtros por marca, categoria e status, e paginação de 20 registros. |
+| `/produtos/novo` | Cadastro de produto com código, nome, slug, descrição, marca, categoria, custo, preço, estoque e status. |
+| `/produtos/:id` | Edição do produto e gerenciamento de suas imagens; `:id` é o UUID do produto. |
+| `/marcas` | Listagem, busca, filtro por status, cadastro e edição de marcas, com paginação de 20 registros. |
+| `/categorias` | Listagem, busca, filtro por status, cadastro e edição de categorias, com paginação de 20 registros. |
+
+As páginas administrativas têm um guard no servidor que valida a sessão antes de renderizar o painel e redireciona para `/login` quando ela está ausente ou inválida. As operações do cliente usam a API na mesma origem, com o cookie de sessão HttpOnly enviado pelo navegador. O JavaScript não lê esse cookie. Antes de cada mutação autenticada, o cliente consulta `/api/v1/admin/auth/session` e usa o token CSRF apenas na memória daquela operação, no cabeçalho `X-CSRF-Token`. Isso evita que respostas concorrentes sobrescrevam o token de outra operação. Uma rejeição `403 CSRF_DENIED` permite uma única nova consulta de sessão e repetição; outros erros não repetem a mutação. Uma resposta 401 redireciona ao login. Nenhum token é persistido em localStorage.
+
+Custo e preço são informados e exibidos em reais, por exemplo `R$ 1.234,56`. A normalização usa strings decimais com duas casas e a formatação usa a parte inteira como `BigInt`, sem conversão monetária para ponto flutuante. O slug é sugerido a partir do nome nos novos cadastros e permanece editável nos formulários de produtos, marcas e categorias.
+
+A desativação de produtos, marcas e categorias exige confirmação, inclusive ao salvar uma mudança de status de ativo para inativo. Ela preserva o registro por soft delete; desativar uma marca ou categoria também retira seus produtos da API pública.
+
+Na edição de um produto já salvo, as imagens são cadastradas e editadas por URL HTTPS, com prévia, texto alternativo e ordem numérica. A ordem é crescente, com desempate por ID. A remoção exige confirmação e exclui a referência da imagem no produto. O painel não faz upload de arquivos.
 
 ## Contrato da API pública
 
@@ -112,6 +133,10 @@ Imagens são referências a URLs HTTPS; o corpo contém metadados, sem upload de
 
 CORS se aplica apenas às rotas públicas, com origens da allowlist `CORS_ORIGINS`, métodos `GET` e preflight `OPTIONS`, sem credenciais. Não há liberação CORS para rotas administrativas. A allowlist pública não autoriza mutações administrativas: elas verificam a origem exata configurada em `APP_ORIGIN` e, após autenticação, o token CSRF da sessão.
 
+## Content Security Policy (CSP)
+
+As rotas `/api/*` mantêm a CSP restritiva `default-src 'none'; frame-ancestors 'none'`. As páginas usam uma política própria com nonce gerado por requisição para scripts e `strict-dynamic`, permitindo as imagens HTTPS exibidas nas prévias. O proxy aplica a política das páginas sem incluir as rotas da API; em desenvolvimento há permissões adicionais para as ferramentas do Next.js.
+
 ## Vercel e produção
 
 Configure `DATABASE_URL`, `DIRECT_URL`, `APP_ORIGIN`, `CORS_ORIGINS` e `AUTH_SECRET` nas variáveis do ambiente correspondente da Vercel. Use `DATABASE_URL` com pool para o runtime serverless e `DIRECT_URL` direta para a CLI e migrations via `prisma.config.ts`, ambas apontando para o mesmo banco. Exija TLS nas conexões de produção com `sslmode=verify-full`, validando certificado e hostname. Não exponha essas variáveis com prefixo `NEXT_PUBLIC_`.
@@ -161,4 +186,4 @@ try {
 }
 ```
 
-Os testes de integração usam fixtures temporárias e as removem ao finalizar. Isso não constitui seed de dados da aplicação. Execute os comandos de build, tipos e testes no seu ambiente para verificar o projeto; esta documentação não atesta sua execução nem aprovação.
+Os testes de integração usam fixtures temporárias e as removem ao finalizar. Fixtures de QA devem ser criadas somente em banco dedicado e descartável, nunca nos bancos de desenvolvimento ou produção. Isso não constitui seed de dados da aplicação. Execute os comandos de build, tipos e testes no seu ambiente para verificar o projeto; esta documentação não atesta sua execução nem aprovação.
