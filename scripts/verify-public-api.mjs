@@ -21,6 +21,7 @@ assert.ok(catalog.data.length > 0);
 const serialized = JSON.stringify(catalog);
 for (const field of ['cost', 'stock', 'active', 'passwordHash', 'tokenHash', 'csrfHash']) assert.equal(serialized.includes(`"${field}":`), false);
 for (const product of catalog.data) {
+  assert.equal(typeof product.inStock, 'boolean');
   assert.match(product.price, /^\d+\.\d{2}$/);
   assert.ok(Array.isArray(product.images));
   for (const [index, image] of product.images.entries()) {
@@ -50,4 +51,4 @@ assert.equal(sourceFile.status, 404);
 const protectedPage = await fetch(`${base}/produtos`, { redirect: 'manual' });
 assert.equal(protectedPage.status, 307);
 assert.equal(protectedPage.headers.get('location'), '/login');
-console.log(JSON.stringify({ result: 'passed', base, products: catalog.pagination.total, checks: ['health', 'catalog', 'images', 'money-strings', 'public-fields', 'details', 'search-and-filters', 'brands', 'categories', 'cors', 'admin-authorization', 'private-file', 'protected-pages'] }));
+console.log(JSON.stringify({ result: 'passed', base, products: catalog.pagination.total, checks: ['health', 'catalog', 'images', 'money-strings', 'public-fields', 'availability', 'details', 'search-and-filters', 'brands', 'categories', 'cors', 'admin-authorization', 'private-file', 'protected-pages'] }));

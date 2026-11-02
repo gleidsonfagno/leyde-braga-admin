@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { hashPassword, loginClient, sessionCookie, verifyPassword } from '../src/lib/auth';
 import { body, endpoint, json, publicCors, requireSameOrigin } from '../src/lib/http';
-import { productFilter, publicProductSelect, serializeProduct } from '../src/lib/catalog';
+import { productFilter, publicProductSelect, serializeProduct, serializePublicProduct } from '../src/lib/catalog';
 import { Prisma } from '@prisma/client';
 import { imageSchema, moneySchema, nonEmptyPatch, paginationSchema, productSchema } from '../src/lib/validation';
 
@@ -27,6 +27,25 @@ test('public database selection excludes private fields at every level', () => {
   assert.deepEqual(where.brand, { active: true, slug: 'brand' });
   assert.deepEqual(where.category, { active: true, slug: 'category' });
 });
+test('public availability follows stock and never serializes private fields', () => {
+  const taxonomy = { id: 'tax', name: 'Taxonomy', slug: 'taxonomy', active: true };
+  const row = {
+    id: 'product', code: 'CODE', slug: 'product', name: 'Product', description: 'Description',
+    price: new Prisma.Decimal('12.30'), cost: new Prisma.Decimal('1.00'), stock: 9, active: true,
+    createdAt: 'private', passwordHash: 'private', brand: taxonomy, category: taxonomy,
+    images: [{ id: 'image', url: 'https://example.com/image.jpg', alt: 'Product', order: 0, productId: 'private' }],
+  };
+  for (const stock of [0, 1, 9]) {
+    const result = serializePublicProduct({ ...row, stock });
+    assert.equal(result.inStock, stock > 0);
+    assert.equal(result.price, '12.30');
+    assert.deepEqual(Object.keys(result).sort(), ['id', 'code', 'slug', 'name', 'description', 'price', 'inStock', 'brand', 'category', 'images'].sort());
+    for (const field of ['cost', 'stock', 'active', 'createdAt', 'passwordHash', 'productId']) {
+      assert.equal(JSON.stringify(result).includes('"' + field + '":'), false);
+    }
+  }
+});
+
 test('password hashes have random salts and verify without plaintext storage', async () => {
   const password = 'long-test-password-123';
   const first = await hashPassword(password);

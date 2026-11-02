@@ -113,7 +113,7 @@ Todas as rotas abaixo usam o prefixo `/api/v1` e não exigem sessão administrat
 
 Na listagem de produtos, os filtros `q`, `brand` e `category` são opcionais. A paginação começa em `page=1`, com `pageSize=20` por padrão e limite de 100 itens por página. Listagem e detalhe só expõem produtos ativos cuja marca e categoria também estejam ativas.
 
-O campo `code` do produto é público. O custo (`cost`) é privado. As respostas públicas também excluem `stock`, `active` e timestamps internos, como `createdAt` e `updatedAt`. Valores monetários são strings com exatamente duas casas decimais, como `"129.90"`; envie esse mesmo formato nos campos administrativos `cost` e `price`.
+O campo `code` do produto é público. O custo (`cost`) é privado. As respostas públicas também excluem `stock`, `active` e timestamps internos, como `createdAt` e `updatedAt`. O campo público `inStock` é um booleano calculado por `stock > 0`, sem divulgar a quantidade interna. Listagens e detalhes usam serialização explícita, incluindo as associações e imagens. Valores monetários são strings com exatamente duas casas decimais, como `"129.90"`; envie esse mesmo formato nos campos administrativos `cost` e `price`.
 
 ## Cache do catálogo público
 

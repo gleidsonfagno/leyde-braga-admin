@@ -415,7 +415,8 @@ test('API integrada com PostgreSQL dedicado', {
     const listing = await data<Product[]>(await storefront(`products?q=${runId}&brand=${brand.slug}&category=${category.slug}`));
     assert.equal(listing.length, 1);
     for (const row of [detail, ...listing]) {
-      keys(row, ['id', 'code', 'slug', 'name', 'description', 'price', 'brand', 'category', 'images']);
+      keys(row, ['id', 'code', 'slug', 'name', 'description', 'price', 'inStock', 'brand', 'category', 'images']);
+      assert.equal((row as Product & { inStock: boolean }).inStock, true);
       for (const privateField of ['cost', 'stock', 'active', 'createdAt', 'updatedAt', 'brandId', 'categoryId']) {
         assert.equal(Object.hasOwn(row, privateField), false, privateField);
       }
@@ -425,6 +426,15 @@ test('API integrada com PostgreSQL dedicado', {
       keys(row.category, ['id', 'name', 'slug']);
       assert.equal(row.images.length, 1);
       for (const image of row.images) keys(image, ['id', 'url', 'alt', 'order']);
+    }
+  });
+
+  await t.test('estoque zero desativa a disponibilidade pública sem expor a quantidade', async () => {
+    for (const stock of [0, 17]) {
+      await data<Product>(await admin(`products/${product.id}`, { method: 'PATCH', input: { stock } }));
+      const row = await data<Product & { inStock: boolean }>(await storefront(`products/${product.slug}`));
+      assert.equal(row.inStock, stock > 0);
+      assert.equal(Object.hasOwn(row, 'stock'), false);
     }
   });
 

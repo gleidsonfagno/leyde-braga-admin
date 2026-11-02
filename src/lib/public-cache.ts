@@ -3,7 +3,7 @@ import { getCache } from '@vercel/functions';
 import { json } from './http';
 
 export const catalogCacheSeconds = 60;
-const namespace = `${process.env.VERCEL_PROJECT_ID ?? 'leyde-braga-admin'}:public-catalog:v1`;
+const namespace = `${process.env.VERCEL_PROJECT_ID ?? 'leyde-braga-admin'}:public-catalog:v2`;
 const tag = `${namespace}:catalog`;
 type Store = Pick<ReturnType<typeof getCache>, 'get' | 'set' | 'expireTag'>;
 

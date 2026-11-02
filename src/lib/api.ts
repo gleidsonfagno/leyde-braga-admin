@@ -2,7 +2,7 @@ import { db } from './db';
 import { authenticate, consumeLoginAttempt, createSession, readSessionToken, sessionCookie, verifyPassword } from './auth';
 import { ApiError, body, endpoint, json, requireSameOrigin } from './http';
 import { adminPaginationSchema, idSchema, imageSchema, loginSchema, nonEmptyPatch, paginationSchema, productSchema, slugSchema, taxonomySchema } from './validation';
-import { productFilter, publicProductSelect, publicTaxonomySelect, publicVisibility, serializeProduct } from './catalog';
+import { productFilter, publicProductSelect, publicTaxonomySelect, publicVisibility, serializeProduct, serializePublicProduct } from './catalog';
 import { publicCatalogCache } from './public-cache';
 
 const missing = () => { throw new ApiError(404, 'NOT_FOUND', 'Registro não encontrado.'); };
@@ -20,17 +20,17 @@ export const publicApi = endpoint(async (request) => {
     return publicCatalogCache.response(`products:${JSON.stringify(query)}`, async () => {
       const where = productFilter(query, true);
       const [products, total] = await Promise.all([
-        db.product.findMany({ where, select: publicProductSelect, skip: (query.page - 1) * query.pageSize, take: query.pageSize, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }),
+        db.product.findMany({ where, select: { ...publicProductSelect, stock: true }, skip: (query.page - 1) * query.pageSize, take: query.pageSize, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }),
         db.product.count({ where }),
       ]);
-      return { data: products.map(serializeProduct), pagination: { page: query.page, pageSize: query.pageSize, total } };
+      return { data: products.map(serializePublicProduct), pagination: { page: query.page, pageSize: query.pageSize, total } };
     });
   }
   if (parts.length === 2 && parts[0] === 'products') {
     const slug = slugSchema.parse(parts[1]);
     return publicCatalogCache.response(`product:${slug}`, async () => {
-      const product = await db.product.findFirst({ where: { ...publicVisibility, slug }, select: publicProductSelect });
-      return product ? { data: serializeProduct(product) } : missing();
+      const product = await db.product.findFirst({ where: { ...publicVisibility, slug }, select: { ...publicProductSelect, stock: true } });
+      return product ? { data: serializePublicProduct(product) } : missing();
     });
   }
   if (parts.length === 1 && (parts[0] === 'brands' || parts[0] === 'categories')) {
